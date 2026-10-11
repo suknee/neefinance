@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Suk Nee's Spending</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a calm ledger — one column of summary, then two-up charts, then the full transaction list. */
+:root {
+  --bg: #f6f7f5; --panel: #ffffff; --fg: #1d2420; --muted: #5d6a63; --line: #dfe4e0;
+  --fixed: #2f6b5a; --day: #c98a2c; --biz: #6b6fb3; --up: #b3412f; --down: #2f7d4f; --accent: #2f6b5a;
+  --serif: "Fraunces", Georgia, "Times New Roman", serif;
+  --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --r: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121614; --panel: #1a201d; --fg: #e7ece9; --muted: #9aa8a0; --line: #2b3430;
+    --fixed: #5fb39a; --day: #e0a64a; --biz: #9599e0; --up: #f07a66; --down: #6cc795; --accent: #5fb39a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121614; --panel: #1a201d; --fg: #e7ece9; --muted: #9aa8a0; --line: #2b3430;
+  --fixed: #5fb39a; --day: #e0a64a; --biz: #9599e0; --up: #f07a66; --down: #6cc795; --accent: #5fb39a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans); padding: env(safe-area-inset-top, 0px) 16px env(safe-area-inset-bottom, 0px); }
+[hidden] { display: none !important; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Login */
+.login { min-height: 100dvh; display: grid; place-items: center; padding-block: 32px; }
+.login-card { width: min(100%, 24rem); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 28px; display: grid; gap: 16px; }
+.login-card h1 { margin: 0; font: 400 1.7rem/1.2 var(--serif); }
+.login-card p { margin: 0; color: var(--muted); font-size: .9rem; }
+.field { display: grid; gap: 6px; font-size: .85rem; color: var(--muted); }
+.field input { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 1rem; color: var(--fg); }
+.btn { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--bg); font-weight: 600; cursor: pointer; }
+.btn:disabled { opacity: .6; cursor: wait; }
+.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font-size: .85rem; justify-self: start; }
+.msg { font-size: .85rem; padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
+.msg.err { border-color: var(--up); color: var(--up); }
+
+/* App */
+.app { max-width: 76rem; margin-inline: auto; padding-block: 24px 48px; display: grid; gap: 24px; }
+.top { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; justify-content: space-between; }
+.top h1 { margin: 0; font: 400 clamp(1.6rem, 4vw, 2.2rem)/1.15 var(--serif); text-wrap: balance; }
+.take { margin: 6px 0 0; color: var(--muted); max-width: 68ch; }
+.who { display: flex; gap: 10px; align-items: center; font-size: .8rem; color: var(--muted); }
+.ghost { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: .8rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { font-size: .82rem; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; }
+.pill[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.pill small { opacity: .7; }
+.toggle { display: inline-flex; gap: 8px; align-items: center; font-size: .82rem; color: var(--muted); cursor: pointer; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; display: grid; gap: 4px; align-content: start; }
+.tile .lbl { font-size: .78rem; color: var(--muted); display: flex; gap: 6px; align-items: center; letter-spacing: .01em; }
+.tile .big { font: 400 1.75rem/1.2 var(--serif); font-variant-numeric: tabular-nums; }
+.tile .sub { font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sw { width: .6rem; height: .6rem; border-radius: 2px; display: inline-block; flex: none; }
+.up { color: var(--up); } .down { color: var(--down); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+.note { margin: 0; font-size: .8rem; color: var(--muted); }
+.chart { position: relative; min-height: 260px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .78rem; color: var(--muted); }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.15); padding: 6px 10px; font-size: .78rem; white-space: nowrap; z-index: 2; font-variant-numeric: tabular-nums; }
+.tip .h { color: var(--muted); }
+.tip .r { display: flex; gap: 6px; align-items: center; }
+.clickable { cursor: pointer; }
+.commit { display: grid; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.commit div { display: flex; justify-content: space-between; gap: 12px; padding-block: 6px; border-bottom: 1px dashed var(--line); }
+.commit div:last-child { border-bottom: 0; font-weight: 600; }
+.notes { margin: 0; padding-left: 1.1rem; display: grid; gap: 6px; font-size: .8rem; color: var(--muted); }
+.search { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); width: min(100%, 18rem); font-size: .85rem; }
+.tablebox { max-height: 30rem; overflow: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .82rem; font-variant-numeric: tabular-nums; }
+th { position: sticky; top: 0; background: var(--panel); text-align: left; font-weight: 500; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+th button { background: none; border: 0; padding: 0; cursor: pointer; font-weight: 500; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.num { text-align: right; white-space: nowrap; }
+.muted { color: var(--muted); }
+.chip { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+@media (max-width: 40rem) { .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+
+<main class="login" id="loginView" hidden>
+  <form class="login-card" id="loginForm" novalidate>
+    <h1 id="loginTitle">Spending dashboard</h1>
+    <p id="loginHint">Sign in to see your accounts.</p>
+    <label class="field" for="email">Email
+      <input id="email" type="email" autocomplete="username" required>
+    </label>
+    <label class="field" for="password">Password
+      <input id="password" type="password" autocomplete="current-password" required minlength="10">
+    </label>
+    <button class="btn" id="submitBtn" type="submit">Sign in</button>
+    <div class="msg" id="loginMsg" hidden></div>
+    <button class="link" id="modeBtn" type="button">First time here? Create your password</button>
+  </form>
+</main>
+
+<div class="app" id="appView" hidden>
+  <header class="top">
+    <div>
+      <h1>Where the money went</h1>
+      <p class="take" id="takeaway"></p>
+    </div>
+    <div class="who"><span id="whoEmail"></span><button class="ghost" id="signOut" type="button">Sign out</button></div>
+  </header>
+
+  <div class="controls">
+    <div class="pills" id="months" role="group" aria-label="Month"></div>
+    <label class="toggle" for="biz"><input type="checkbox" id="biz" checked> Include business costs</label>
+  </div>
+
+  <section class="tiles">
+    <div class="tile"><div class="lbl" id="t-total-lbl">Total spent</div><div class="big" id="t-total"></div><div class="sub" id="t-delta"></div></div>
+    <div class="tile"><div class="lbl"><i class="sw" style="background:var(--fixed)"></i>Fixed commitments</div><div class="big" id="t-fixed"></div><div class="sub">Home loan, car loan, instalments, family</div></div>
+    <div class="tile"><div class="lbl"><i class="sw" style="background:var(--day)"></i>Day-to-day</div><div class="big" id="t-day"></div><div class="sub">Food, travel, shopping, transport and more</div></div>
+    <div class="tile" id="tile-biz"><div class="lbl"><i class="sw" style="background:var(--biz)"></i>Business</div><div class="big" id="t-biz"></div><div class="sub">Facebook ads, Shopify, Wix, Higgsfield</div></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Spending per month</h2>
+      <p class="note">Tap a bar to see that month. * July and October are only partly covered.</p>
+      <div class="legend" id="legend"></div>
+      <div class="chart" id="monthChart"></div>
+    </section>
+    <section class="card">
+      <h2 id="catTitle">By category</h2>
+      <p class="note">Tap a category to list its transactions below.</p>
+      <div class="chart" id="catChart" style="min-height:200px"></div>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Monthly commitments</h2>
+      <p class="note">Recurring payments at their latest full-month amount.</p>
+      <div class="commit" id="commit"></div>
+    </section>
+    <section class="card">
+      <h2>How this was put together</h2>
+      <ul class="notes">
+        <li>From HSBC and UOB Visa statements, CIMB savings statements, and Grab and Touch 'n Go screenshots.</li>
+        <li>Each purchase counts in the month it was made. Card bill payments and transfers between your own accounts are left out.</li>
+        <li>Large Touch 'n Go top-ups were traced to where the money went. Each card top-up costs a 1% fee.</li>
+        <li>The CIMB credit card has no statement, so each bill is one line.</li>
+        <li>September is missing the car loan and the ITWorld instalment, which were paid after the statements.</li>
+        <li>July starts 7 Jul (HSBC) and 24 Jul (UOB). October covers 1–7 Oct.</li>
+      </ul>
+    </section>
+  </div>
+
+  <section class="card" id="txns">
+    <h2 id="txTitle">Transactions</h2>
+    <div class="controls">
+      <input class="search" id="q" type="search" placeholder="Search merchant or category" aria-label="Search transactions">
+      <button class="pill" id="clearCat" type="button" hidden></button>
+    </div>
+    <div class="tablebox">
+      <table>
+        <thead><tr>
+          <th><button data-sort="date" type="button">Date</button></th>
+          <th><button data-sort="merchant" type="button">Merchant</button></th>
+          <th class="hide-sm"><button data-sort="category" type="button">Category</button></th>
+          <th class="hide-sm"><button data-sort="paid_with" type="button">Paid with</button></th>
+          <th class="num"><button data-sort="amount" type="button">Amount (RM)</button></th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script>
+// Public project address and publishable key. These are safe to be public:
+// the database only returns rows to the owner's signed-in account (row-level security).
+const SUPABASE_URL = 'https://lxcplxtwmbovjtdnbczv.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_wKzDqirIz3izXE05QnHs7g_5AlAuhN-';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const $ = (id) => document.getElementById(id);
+const TYPES = ['Fixed', 'Day-to-day', 'Business'];
+const KEY = { 'Fixed': 'fixed', 'Day-to-day': 'daytoday', 'Business': 'business' };
+const MLABEL = { '01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr', '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Aug', '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec' };
+const PARTIAL = new Set(['2026-07', '2026-10']);
+const mlabel = (m) => MLABEL[m.slice(5)];
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const color = (t) => css({ 'Fixed': '--fixed', 'Day-to-day': '--day', 'Business': '--biz' }[t]);
+const fmt = d3.format(',.2f');
+const rm = (x) => 'RM ' + fmt(x);
+const rm0 = (x) => 'RM ' + d3.format(',.0f')(x);
+
+/* ---------- Login ---------- */
+let signupMode = false;
+$('modeBtn').addEventListener('click', () => {
+  signupMode = !signupMode;
+  $('loginTitle').textContent = signupMode ? 'Create your password' : 'Spending dashboard';
+  $('loginHint').textContent = signupMode ? 'Use the email this dashboard belongs to. You will get an email to confirm it, then come back and sign in.' : 'Sign in to see your accounts.';
+  $('submitBtn').textContent = signupMode ? 'Create password' : 'Sign in';
+  $('modeBtn').textContent = signupMode ? 'Already set up? Sign in' : 'First time here? Create your password';
+  $('password').autocomplete = signupMode ? 'new-password' : 'current-password';
+  showMsg('');
+});
+function showMsg(text, err) { const m = $('loginMsg'); m.hidden = !text; m.textContent = text; m.className = 'msg' + (err ? ' err' : ''); }
+
+$('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('email').value.trim(), password = $('password').value;
+  if (!email || password.length < 10) { showMsg('Enter your email and a password of at least 10 characters.', true); return; }
+  $('submitBtn').disabled = true; showMsg('');
+  try {
+    if (signupMode) {
+      const { error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } });
+      if (error) throw error;
+      showMsg('Check your inbox and click the confirmation link. Then come back here and sign in.');
+    } else {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    }
+  } catch (err) {
+    showMsg(/confirm/i.test(err.message) ? 'Your email is not confirmed yet. Click the link in the confirmation email first.' : (err.message || 'Sign-in failed. Check your email and password.'), true);
+  } finally { $('submitBtn').disabled = false; }
+});
+$('signOut').addEventListener('click', () => sb.auth.signOut());
+
+sb.auth.onAuthStateChange((_event, session) => { route(session); });
+let loadedFor = null;
+async function route(session) {
+  if (!session) { $('appView').hidden = true; $('loginView').hidden = false; loadedFor = null; return; }
+  if (loadedFor === session.user.id) return;
+  loadedFor = session.user.id;
+  $('whoEmail').textContent = session.user.email;
+  const { data, error } = await sb.from('transactions').select('*').order('date');
+  if (error || !data || !data.length) {
+    await sb.auth.signOut();
+    showMsg('This account does not have access to the dashboard.', true);
+    return;
+  }
+  $('loginView').hidden = true; $('appView').hidden = false;
+  start(data.map((r) => ({ ...r, amount: Number(r.amount) })));
+}
+
+/* ---------- Dashboard ---------- */
+let TX = [], MONTHS = [], CATS = [];
+const state = { month: null, cat: null, sort: 'amount', dir: -1, q: '' };
+
+function start(rows) {
+  TX = rows;
+  const m = {};
+  for (const t of TX) {
+    m[t.month] = m[t.month] || { month: t.month, fixed: 0, daytoday: 0, business: 0, partial: PARTIAL.has(t.month) };
+    m[t.month][KEY[t.type]] += t.amount;
+  }
+  MONTHS = Object.values(m).sort((a, b) => a.month.localeCompare(b.month));
+  MONTHS.forEach((r) => { r.total = r.fixed + r.daytoday + r.business; r.personal = r.fixed + r.daytoday; });
+  const c = {};
+  for (const t of TX) { const k = t.month + '|' + t.category; c[k] = c[k] || { month: t.month, category: t.category, type: t.type, total: 0, count: 0 }; c[k].total += t.amount; c[k].count++; }
+  CATS = Object.values(c);
+  const full = MONTHS.filter((r) => !r.partial);
+  state.month = (full[full.length - 1] || MONTHS[MONTHS.length - 1]).month;
+  draw();
+}
+
+$('biz').addEventListener('change', draw);
+$('q').addEventListener('input', () => { state.q = $('q').value.toLowerCase(); drawTable(); });
+$('clearCat').addEventListener('click', () => { state.cat = null; drawCats(); drawTable(); });
+document.querySelectorAll('th button').forEach((b) => b.addEventListener('click', () => {
+  const k = b.dataset.sort; state.dir = state.sort === k ? -state.dir : (k === 'amount' ? -1 : 1); state.sort = k; drawTable();
+}));
+window.addEventListener('resize', () => { if (TX.length) { drawMonthChart(); drawCats(); } });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (TX.length) draw(); });
+const pick = (m) => { state.month = m; state.cat = null; draw(); };
+
+function draw() {
+  drawMonths(); drawTiles(); drawTakeaway(); drawMonthChart(); drawCats(); drawTable(); drawCommit();
+}
+
+function drawMonths() {
+  $('months').replaceChildren(...MONTHS.map((r) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'pill';
+    b.setAttribute('aria-pressed', r.month === state.month); b.textContent = mlabel(r.month) + ' ' + r.month.slice(0, 4);
+    if (r.partial) { const s = document.createElement('small'); s.textContent = ' (partial)'; b.append(s); }
+    b.addEventListener('click', () => pick(r.month)); return b;
+  }));
+}
+
+function drawTiles() {
+  const inc = $('biz').checked, f = inc ? 'total' : 'personal';
+  const i = MONTHS.findIndex((r) => r.month === state.month), cur = MONTHS[i], prev = MONTHS[i - 1];
+  $('t-total-lbl').textContent = 'Total spent in ' + mlabel(cur.month) + (cur.partial ? ' (partial)' : '') + (inc ? '' : ', excl. business');
+  $('t-total').textContent = rm(cur[f]); $('t-fixed').textContent = rm(cur.fixed); $('t-day').textContent = rm(cur.daytoday); $('t-biz').textContent = rm(cur.business);
+  $('tile-biz').hidden = !inc;
+  const d = $('t-delta'); d.replaceChildren();
+  if (prev && !prev.partial && !cur.partial) {
+    const diff = cur[f] - prev[f], s = document.createElement('span');
+    s.className = diff > 0 ? 'up' : 'down'; s.textContent = (diff > 0 ? '+' : '−') + rm(Math.abs(diff));
+    d.append(s, ' vs ' + mlabel(prev.month));
+  } else d.textContent = cur.partial ? 'Statements cover only part of this month' : 'No full month before this one';
+}
+
+function drawTakeaway() {
+  const inc = $('biz').checked, f = inc ? 'total' : 'personal';
+  const full = MONTHS.filter((r) => !r.partial), cur = MONTHS.find((r) => r.month === state.month);
+  const top = CATS.filter((c) => c.month === state.month && (inc || c.type !== 'Business')).sort((a, b) => b.total - a.total)[0];
+  $('takeaway').textContent = 'Over ' + full.map((r) => mlabel(r.month)).join(' and ') + ' you spent about ' + rm0(d3.mean(full, (r) => r[f])) + ' a month' + (inc ? '' : ' before business costs') +
+    '. In ' + mlabel(state.month) + ', the largest category was ' + top.category + ' at ' + rm0(top.total) + ' (' + d3.format('.0%')(top.total / cur[f]) + ').';
+}
+
+function tipFor(box) { let t = box.querySelector('.tip'); if (!t) { t = document.createElement('div'); t.className = 'tip'; t.hidden = true; box.append(t); } return t; }
+function placeTip(t, box, ev) {
+  const r = box.getBoundingClientRect(); t.hidden = false;
+  let x = ev.clientX - r.left + 12; if (x + t.offsetWidth > r.width) x = ev.clientX - r.left - t.offsetWidth - 12;
+  t.style.left = Math.max(0, x) + 'px'; t.style.top = (ev.clientY - r.top + 12) + 'px';
+}
+
+function drawMonthChart() {
+  const box = $('monthChart'), inc = $('biz').checked, types = inc ? TYPES : TYPES.slice(0, 2);
+  $('legend').replaceChildren(...types.map((t) => { const s = document.createElement('span'), i = document.createElement('i'); i.className = 'sw'; i.style.background = color(t); s.append(i, t); return s; }));
+  const W = Math.max(280, box.clientWidth), H = 260, m = { t: 22, r: 8, b: 28, l: 8 };
+  box.replaceChildren();
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const sum = (r) => types.reduce((s, t) => s + r[KEY[t]], 0);
+  const y = d3.scaleLinear([0, d3.max(MONTHS, sum) * 1.12], [H - m.b, m.t]).nice(), yt = y.ticks(4), tf = (v) => 'RM ' + d3.format('~s')(v);
+  const probe = svg.append('text').attr('font-size', 11).text(tf(yt[yt.length - 1])); m.l = probe.node().getComputedTextLength() + 12; probe.remove();
+  const x = d3.scaleBand(MONTHS.map((r) => r.month), [m.l, W - m.r]).padding(0.35);
+  svg.append('g').selectAll('line').data(yt).join('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y).attr('y2', y).attr('stroke', css('--line'));
+  svg.append('g').selectAll('text').data(yt).join('text').attr('x', m.l - 6).attr('y', y).attr('dy', '.32em').attr('text-anchor', 'end').attr('font-size', 11).attr('fill', css('--muted')).text(tf);
+  svg.append('g').selectAll('text').data(MONTHS).join('text').attr('x', (r) => x(r.month) + x.bandwidth() / 2).attr('y', H - 8).attr('text-anchor', 'middle').attr('font-size', 11)
+    .attr('fill', (r) => r.month === state.month ? css('--fg') : css('--muted')).attr('font-weight', (r) => r.month === state.month ? 600 : 400).text((r) => mlabel(r.month) + (r.partial ? '*' : ''));
+  d3.stack().keys(types.map((t) => KEY[t]))(MONTHS).forEach((layer, li) => {
+    svg.append('g').selectAll('rect').data(layer).join('rect').attr('x', (d) => x(d.data.month)).attr('width', x.bandwidth())
+      .attr('y', (d) => y(d[1])).attr('height', (d) => Math.max(0, y(d[0]) - y(d[1]) - 1)).attr('rx', 3).attr('fill', color(types[li]))
+      .attr('opacity', (d) => d.data.month === state.month ? 1 : d.data.partial ? .35 : .6);
+  });
+  svg.append('g').selectAll('text').data(MONTHS).join('text').attr('x', (r) => x(r.month) + x.bandwidth() / 2).attr('y', (r) => y(sum(r)) - 6)
+    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', css('--fg')).text((r) => rm0(sum(r)));
+  const t = tipFor(box);
+  svg.append('g').selectAll('rect').data(MONTHS).join('rect').attr('class', 'clickable').attr('x', (r) => x(r.month) - x.step() * x.paddingInner() / 2).attr('width', x.step())
+    .attr('y', m.t).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+    .on('click', (e, r) => pick(r.month))
+    .on('mousemove', (e, r) => {
+      t.replaceChildren(); const h = document.createElement('div'); h.className = 'h'; h.textContent = mlabel(r.month) + (r.partial ? ' (partial)' : ''); t.append(h);
+      for (const ty of types) { const d = document.createElement('div'), i = document.createElement('i'); d.className = 'r'; i.className = 'sw'; i.style.background = color(ty); d.append(i, ty + ': ' + rm(r[KEY[ty]])); t.append(d); }
+      placeTip(t, box, e);
+    }).on('mouseleave', () => { t.hidden = true; });
+}
+
+function drawCats() {
+  const box = $('catChart'), inc = $('biz').checked;
+  const rows = CATS.filter((r) => r.month === state.month && (inc || r.type !== 'Business')).sort((a, b) => b.total - a.total);
+  $('catTitle').textContent = 'By category, ' + mlabel(state.month);
+  const W = Math.max(280, box.clientWidth), bh = 22, gap = 8, H = rows.length * (bh + gap) + 4;
+  box.replaceChildren();
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const probe = svg.append('text').attr('font-size', 12); let lw = 0;
+  rows.forEach((r) => { probe.text(r.category); lw = Math.max(lw, probe.node().getComputedTextLength()); });
+  probe.text('RM 99,999'); const vw = probe.node().getComputedTextLength() + 8; probe.remove();
+  lw = Math.min(lw + 10, W < 440 ? W * .45 : 230);
+  const x = d3.scaleLinear([0, d3.max(rows, (r) => r.total) || 1], [0, W - lw - vw]);
+  const g = svg.selectAll('g').data(rows).join('g').attr('class', 'clickable').attr('transform', (r, i) => `translate(0,${i * (bh + gap)})`)
+    .attr('opacity', (r) => !state.cat || state.cat === r.category ? 1 : .4)
+    .on('click', (e, r) => { state.cat = state.cat === r.category ? null : r.category; drawCats(); drawTable(); $('txns').scrollIntoView({ behavior: 'smooth' }); });
+  g.append('text').attr('x', lw - 10).attr('y', bh / 2).attr('dy', '.32em').attr('text-anchor', 'end').attr('font-size', 12).attr('fill', css('--fg')).text((r) => r.category)
+    .each(function () { let s = this.textContent; while (this.getComputedTextLength() > lw - 12 && s.length > 4) { s = s.slice(0, -2); this.textContent = s + '…'; } });
+  g.append('rect').attr('x', lw).attr('height', bh).attr('width', (r) => Math.max(2, x(r.total))).attr('rx', 4).attr('fill', (r) => color(r.type));
+  g.append('text').attr('x', (r) => lw + Math.max(2, x(r.total)) + 6).attr('y', bh / 2).attr('dy', '.32em').attr('font-size', 12).attr('fill', css('--muted')).text((r) => rm0(r.total));
+  const t = tipFor(box);
+  g.on('mousemove', (e, r) => { t.replaceChildren(); const h = document.createElement('div'); h.className = 'h'; h.textContent = r.category + ' · ' + r.type; const d = document.createElement('div'); d.textContent = rm(r.total) + ' across ' + r.count + ' transaction' + (r.count > 1 ? 's' : ''); t.append(h, d); placeTip(t, box, e); })
+   .on('mouseleave', () => { t.hidden = true; });
+}
+
+function drawTable() {
+  const inc = $('biz').checked, k = state.sort;
+  let rows = TX.filter((r) => r.month === state.month && (inc || r.type !== 'Business'));
+  if (state.cat) rows = rows.filter((r) => r.category === state.cat);
+  if (state.q) rows = rows.filter((r) => (r.merchant + ' ' + r.category + ' ' + r.note).toLowerCase().includes(state.q));
+  rows.sort((a, b) => k === 'amount' ? state.dir * (a.amount - b.amount) : state.dir * String(a[k]).localeCompare(String(b[k])));
+  $('clearCat').hidden = !state.cat; $('clearCat').textContent = state.cat ? state.cat + ' ×' : '';
+  $('txTitle').textContent = 'Transactions, ' + mlabel(state.month) + ' · ' + rows.length + ' items · ' + rm(d3.sum(rows, (r) => r.amount));
+  $('tbody').replaceChildren(...rows.map((r) => {
+    const tr = document.createElement('tr');
+    const td = (txt, cls) => { const c = document.createElement('td'); if (cls) c.className = cls; c.textContent = txt; tr.append(c); return c; };
+    td(d3.utcFormat('%-d %b')(new Date(r.date)), 'muted');
+    const mc = td(r.merchant); if (r.note) { const n = document.createElement('div'); n.className = 'muted'; n.textContent = r.note; mc.append(n); }
+    const cc = td('', 'hide-sm'), chip = document.createElement('span'), i = document.createElement('i'); chip.className = 'chip'; i.className = 'sw'; i.style.background = color(r.type); chip.append(i, r.category); cc.append(chip);
+    td(r.paid_with, 'hide-sm muted'); td(fmt(r.amount), 'num');
+    return tr;
+  }));
+}
+
+function drawCommit() {
+  const rules = [
+    ['Duta Park home loan', (t) => t.merchant.startsWith('Duta Park home loan')],
+    ['Condo maintenance', (t) => /maintenance|Malton/.test(t.merchant)],
+    ['Car loan (HLBB)', (t) => t.category === 'Car loan'],
+    ['Family support (Tan Jou Yee)', (t) => t.category === 'Family support'],
+    ['EZBeli instalment', (t) => t.merchant.startsWith('EZBeli')],
+    ['ITWorld instalment', (t) => t.merchant.startsWith('ITWorld')],
+    ['Victoria Facelift instalment', (t) => t.merchant.startsWith('Victoria')],
+    ['Shopee PayLater', (t) => t.merchant.startsWith('Shopee SPayLater')],
+    ['Apple services', (t) => t.merchant.startsWith('Apple')],
+    ['Claude', (t) => t.merchant.startsWith('Claude')],
+    ['Microsoft 365', (t) => t.merchant.startsWith('Microsoft')],
+    ['Sonicboom', (t) => t.merchant.startsWith('Sonicboom')],
+  ];
+  const full = MONTHS.filter((r) => !r.partial).map((r) => r.month);
+  const items = rules.map(([name, test]) => {
+    const per = {}; TX.forEach((t) => { if (test(t)) per[t.month] = (per[t.month] || 0) + t.amount; });
+    const mo = full.filter((m) => per[m]).pop() || Object.keys(per).sort().pop();
+    return [name, per[mo] || 0];
+  }).filter((r) => r[1] > 0);
+  const row = (a, b) => { const d = document.createElement('div'), x = document.createElement('span'), y = document.createElement('span'); x.textContent = a; y.textContent = b; d.append(x, y); return d; };
+  $('commit').replaceChildren(...items.map(([n, v]) => row(n, rm(v))), row('About this much leaves every month', rm(d3.sum(items, (r) => r[1]))));
+}
+
+sb.auth.getSession().then(({ data }) => route(data.session));
+</script>
+</body>
+</html>
