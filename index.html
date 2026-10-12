@@ -396,14 +396,14 @@ async function reload(month) {
 
 async function removeManual(id, label) {
   const toast = $('aToast');
-  const { error } = await sb.from('transactions').delete().eq('id', id).eq('source', 'manual');
+  const { error } = await sb.from('transactions').delete().eq('id', id).in('source', ['manual', 'telegram']);
   if (error) { toast.className = 'toast err'; toast.textContent = "Couldn't remove it: " + error.message; return; }
   toast.className = 'toast'; toast.textContent = 'Removed ' + label + '.';
   await reload();
 }
 
 function drawRecent() {
-  const mine = TX.filter((t) => t.source === 'manual').sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 5);
+  const mine = TX.filter((t) => t.source === 'manual' || t.source === 'telegram').sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 5);
   const box = $('recent'); box.replaceChildren();
   if (!mine.length) return;
   const h = document.createElement('p'); h.className = 'note'; h.textContent = 'Recently added'; box.append(h);
@@ -556,8 +556,8 @@ function drawTable() {
     const td = (txt, cls) => { const c = document.createElement('td'); if (cls) c.className = cls; c.textContent = txt; tr.append(c); return c; };
     td(d3.utcFormat('%-d %b')(new Date(r.date)), 'muted');
     const mc = td(r.merchant);
-    if (r.source === 'manual') {
-      const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = 'added by you'; mc.append(tag);
+    if (r.source === 'manual' || r.source === 'telegram') {
+      const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = r.source === 'telegram' ? 'via Telegram' : 'added by you'; mc.append(tag);
       const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
       del.setAttribute('aria-label', 'Remove ' + r.merchant);
       del.addEventListener('click', () => { if (confirm('Remove "' + r.merchant + '" (' + rm(r.amount) + ')?')) removeManual(r.id, r.merchant); });
