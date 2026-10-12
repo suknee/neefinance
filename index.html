@@ -94,6 +94,25 @@ td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top
 .muted { color: var(--muted); }
 .chip { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
 @media (max-width: 40rem) { .hide-sm { display: none; } }
+
+/* Add expense */
+.add { background: var(--panel); border: 1px solid var(--accent); border-radius: var(--r); padding: 18px 20px; display: grid; gap: 12px; }
+.add-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; }
+.add-head h2 { margin: 0; font: 400 1.25rem/1.2 var(--serif); }
+.add-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)); gap: 10px; align-items: end; }
+.add-form .wide { grid-column: span 2; }
+@media (max-width: 30rem) { .add-form .wide { grid-column: auto; } }
+.add-form input, .add-form select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font-size: 1rem; }
+.add-form .btn { width: 100%; }
+.hint { font-size: .78rem; color: var(--muted); min-height: 1.2em; }
+.hint b { color: var(--fg); font-weight: 500; }
+.toast { font-size: .85rem; color: var(--down); min-height: 1.2em; }
+.toast.err { color: var(--up); }
+.recent { display: grid; gap: 4px; font-size: .82rem; font-variant-numeric: tabular-nums; }
+.recent div { display: flex; justify-content: space-between; gap: 10px; padding-block: 4px; border-bottom: 1px dashed var(--line); }
+.tag { font-size: .7rem; border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; color: var(--muted); margin-left: 6px; white-space: nowrap; }
+.del { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 4px; font-size: 1rem; line-height: 1; }
+.del:hover { color: var(--up); }
 </style>
 </head>
 <body>
@@ -122,6 +141,27 @@ td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top
     </div>
     <div class="who"><span id="whoEmail"></span><button class="ghost" id="signOut" type="button">Sign out</button></div>
   </header>
+
+  <section class="add" id="add">
+    <div class="add-head">
+      <h2>Add an expense</h2>
+      <span class="note">Type what you spent. The category is picked for you; change it if it's wrong.</span>
+    </div>
+    <form class="add-form" id="addForm" novalidate>
+      <label class="field" for="aDate">Date<input id="aDate" type="date" required></label>
+      <label class="field wide" for="aWhat">What / where<input id="aWhat" type="text" maxlength="120" placeholder="e.g. Salad Kitchen lunch" autocomplete="off" required></label>
+      <label class="field" for="aAmt">Amount (RM)<input id="aAmt" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0.00" required></label>
+      <label class="field" for="aCat">Category<select id="aCat"></select></label>
+      <label class="field" for="aPaid">Paid with<select id="aPaid">
+        <option>Cash</option><option>HSBC Visa</option><option>UOB Visa</option><option>CIMB card</option><option>TNG eWallet</option><option>GrabPay</option><option>DuitNow / bank transfer</option>
+      </select></label>
+      <label class="field wide" for="aNote">Note (optional)<input id="aNote" type="text" maxlength="300" autocomplete="off"></label>
+      <button class="btn" id="aSave" type="submit">Save expense</button>
+    </form>
+    <div class="hint" id="aHint"></div>
+    <div class="toast" id="aToast" role="status"></div>
+    <div class="recent" id="recent"></div>
+  </section>
 
   <div class="controls">
     <div class="pills" id="months" role="group" aria-label="Month"></div>
@@ -250,25 +290,139 @@ async function route(session) {
   if (loadedFor === session.user.id) return;
   loadedFor = session.user.id;
   $('whoEmail').textContent = session.user.email;
-  const { data, error } = await sb.from('transactions').select('*').order('date');
-  if (error || !data || !data.length) {
+  const rows = await fetchRows();
+  if (!rows || !rows.length) {
     await sb.auth.signOut();
     showMsg('This account does not have access to the dashboard.', true);
     return;
   }
   $('loginView').hidden = true; $('appView').hidden = false;
-  start(data.map((r) => ({ ...r, amount: Number(r.amount) })));
+  start(rows);
+}
+async function fetchRows() {
+  const { data, error } = await sb.from('transactions').select('*').order('date');
+  if (error) return null;
+  return data.map((r) => ({ ...r, amount: Number(r.amount) }));
+}
+
+/* ---------- Add expense ---------- */
+const CATEGORY_TYPE = {
+  'Food & dining': 'Day-to-day', 'Groceries & convenience': 'Day-to-day', 'Grab rides & food': 'Day-to-day',
+  'Transport, tolls & parking': 'Day-to-day', 'Travel': 'Day-to-day', 'Shopping': 'Day-to-day',
+  'Personal care & health': 'Day-to-day', 'Fitness & leisure': 'Day-to-day', 'Household': 'Day-to-day',
+  'Subscriptions': 'Day-to-day', 'Card & top-up fees': 'Day-to-day', 'Other': 'Day-to-day',
+  'Home loan & maintenance': 'Fixed', 'Car loan': 'Fixed', 'Family support': 'Fixed', 'Instalment plans': 'Fixed',
+  'Business: Facebook ads': 'Business', 'Business: online store & tools': 'Business',
+};
+// Keyword rules, used when your history has no match. First match wins.
+const RULES = [
+  [/grab\s*(car|ride|taxi)|\bgrab\b|bolt|indrive|airasia ride/i, 'Grab rides & food'],
+  [/parking|toll|petrol|petronas|shell|caltex|bhp|\bfuel\b|lrt|mrt|\bbus\b|touch.?n.?go|tng reload|car wash|servic/i, 'Transport, tolls & parking'],
+  [/grocer|speedmart|7.?eleven|mynews|family ?mart|kk ?mart|aeon|lotus|giant|mydin|jaya|village grocer|cold storage|market|\bmart\b/i, 'Groceries & convenience'],
+  [/agoda|hotel|airasia|flight|klook|booking\.com|trip\.com|airbnb|resort|villa/i, 'Travel'],
+  [/shopee|lazada|uniqlo|h&m|padini|zara|lacoste|cotton on|taobao|tiktok shop|clothes|shoes|bag/i, 'Shopping'],
+  [/watson|guardian|clinic|klinik|pharmac|doctor|dental|spa|salon|hair|massage|facial|nail|hospital/i, 'Personal care & health'],
+  [/gym|sonicboom|yoga|pilates|tgv|gsc|cinema|movie|badminton|riding|concert|karaoke/i, 'Fitness & leisure'],
+  [/mr ?diy|ikea|daiso|hardware|laundry|cleaning|electric|tnb|water|indah|unifi|internet/i, 'Household'],
+  [/apple|icloud|netflix|spotify|youtube|disney|microsoft|claude|chatgpt|subscription/i, 'Subscriptions'],
+  [/facebook|meta ads|fb ads/i, 'Business: Facebook ads'],
+  [/shopify|wix|higgsfield|canva|domain/i, 'Business: online store & tools'],
+  [/loan|maintenance|duta park/i, 'Home loan & maintenance'],
+  [/jou yee|family|mum|mom|dad|parents/i, 'Family support'],
+  [/lunch|dinner|breakfast|brunch|supper|coffee|kopi|tea|cafe|café|restaurant|restoran|kitchen|food|nasi|mee|noodle|mamak|sushi|pizza|burger|bakery|boba|tealive|starbucks|zus|dessert|bistro|dining/i, 'Food & dining'],
+];
+const norm = (s) => s.toLowerCase().replace(/\(.*?\)|[^a-z0-9& ]/g, ' ').replace(/\s+/g, ' ').trim();
+function suggest(text) {
+  const q = norm(text);
+  if (q.length < 2) return null;
+  // 1. Your own history: the most recent transaction whose merchant shares its first word(s) with what you typed.
+  const first = q.split(' ').filter((w) => w.length > 2).slice(0, 2).join(' ');
+  if (first) {
+    // Most common category among past matches; purchases made on a trip don't count as the merchant's usual category.
+    const hits = TX.filter((t) => !['CIMB card (not itemised)', 'Travel'].includes(t.category) && norm(t.merchant).includes(first));
+    if (hits.length) {
+      const top = d3.greatest(d3.rollups(hits, (v) => v.length, (t) => t.category), (d) => d[1])[0];
+      const ex = hits.filter((t) => t.category === top).pop();
+      return { category: top, why: 'like "' + ex.merchant + '" before' };
+    }
+  }
+  // 2. Keyword rules.
+  for (const [re, cat] of RULES) if (re.test(text)) return { category: cat, why: 'from the words you typed' };
+  return null;
+}
+
+const catSel = $('aCat');
+catSel.replaceChildren(...Object.keys(CATEGORY_TYPE).map((c) => new Option(c, c)));
+catSel.value = 'Other';
+let catTouched = false;
+catSel.addEventListener('change', () => { catTouched = true; $('aHint').textContent = ''; });
+const todayKL = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(new Date());
+$('aDate').value = todayKL(); $('aDate').max = todayKL();
+$('aWhat').addEventListener('input', () => {
+  if (catTouched) return;
+  const s = suggest($('aWhat').value), h = $('aHint');
+  h.replaceChildren();
+  if (s) { catSel.value = s.category; const b = document.createElement('b'); b.textContent = s.category; h.append('Category: ', b, ' (' + s.why + ')'); }
+  else catSel.value = 'Other';
+});
+
+$('addForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const toast = $('aToast'); toast.className = 'toast';
+  const date = $('aDate').value, merchant = $('aWhat').value.trim(), amount = Math.round(Number($('aAmt').value) * 100) / 100;
+  if (!date || !merchant || !(amount > 0)) { toast.className = 'toast err'; toast.textContent = 'Fill in the date, what you spent on, and an amount above 0.'; return; }
+  if (amount >= 1000000) { toast.className = 'toast err'; toast.textContent = 'That amount looks too large. Check the number.'; return; }
+  const category = catSel.value;
+  $('aSave').disabled = true; toast.textContent = 'Saving…';
+  const { error } = await sb.from('transactions').insert({
+    date, month: date.slice(0, 7), merchant, amount, category, type: CATEGORY_TYPE[category],
+    paid_with: $('aPaid').value, note: $('aNote').value.trim(), source: 'manual',
+  });
+  $('aSave').disabled = false;
+  if (error) { toast.className = 'toast err'; toast.textContent = "Couldn't save: " + error.message + ' Try signing out and in again.'; return; }
+  toast.textContent = 'Saved ' + rm(amount) + ' · ' + merchant + ' → ' + category;
+  $('aWhat').value = ''; $('aAmt').value = ''; $('aNote').value = ''; $('aHint').textContent = ''; catSel.value = 'Other'; catTouched = false;
+  await reload(date.slice(0, 7));
+  $('aWhat').focus();
+});
+
+async function reload(month) {
+  const rows = await fetchRows();
+  if (!rows) return;
+  const keepCat = state.cat;
+  start(rows, month || state.month);
+  state.cat = keepCat; drawCats(); drawTable();
+}
+
+async function removeManual(id, label) {
+  const toast = $('aToast');
+  const { error } = await sb.from('transactions').delete().eq('id', id).eq('source', 'manual');
+  if (error) { toast.className = 'toast err'; toast.textContent = "Couldn't remove it: " + error.message; return; }
+  toast.className = 'toast'; toast.textContent = 'Removed ' + label + '.';
+  await reload();
+}
+
+function drawRecent() {
+  const mine = TX.filter((t) => t.source === 'manual').sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 5);
+  const box = $('recent'); box.replaceChildren();
+  if (!mine.length) return;
+  const h = document.createElement('p'); h.className = 'note'; h.textContent = 'Recently added'; box.append(h);
+  for (const t of mine) {
+    const d = document.createElement('div'), a = document.createElement('span'), b = document.createElement('span');
+    a.textContent = d3.utcFormat('%-d %b')(new Date(t.date)) + ' · ' + t.merchant + ' · ' + t.category;
+    b.textContent = rm(t.amount); d.append(a, b); box.append(d);
+  }
 }
 
 /* ---------- Dashboard ---------- */
 let TX = [], MONTHS = [], CATS = [];
 const state = { month: null, cat: null, sort: 'amount', dir: -1, q: '' };
 
-function start(rows) {
+function start(rows, keepMonth) {
   TX = rows;
   const m = {};
   for (const t of TX) {
-    m[t.month] = m[t.month] || { month: t.month, fixed: 0, daytoday: 0, business: 0, partial: PARTIAL.has(t.month) };
+    m[t.month] = m[t.month] || { month: t.month, fixed: 0, daytoday: 0, business: 0, partial: PARTIAL.has(t.month) || t.month >= todayKL().slice(0, 7) };
     m[t.month][KEY[t.type]] += t.amount;
   }
   MONTHS = Object.values(m).sort((a, b) => a.month.localeCompare(b.month));
@@ -277,7 +431,7 @@ function start(rows) {
   for (const t of TX) { const k = t.month + '|' + t.category; c[k] = c[k] || { month: t.month, category: t.category, type: t.type, total: 0, count: 0 }; c[k].total += t.amount; c[k].count++; }
   CATS = Object.values(c);
   const full = MONTHS.filter((r) => !r.partial);
-  state.month = (full[full.length - 1] || MONTHS[MONTHS.length - 1]).month;
+  state.month = MONTHS.some((r) => r.month === keepMonth) ? keepMonth : (full[full.length - 1] || MONTHS[MONTHS.length - 1]).month;
   draw();
 }
 
@@ -292,7 +446,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if
 const pick = (m) => { state.month = m; state.cat = null; draw(); };
 
 function draw() {
-  drawMonths(); drawTiles(); drawTakeaway(); drawMonthChart(); drawCats(); drawTable(); drawCommit();
+  drawMonths(); drawTiles(); drawTakeaway(); drawMonthChart(); drawCats(); drawTable(); drawCommit(); drawRecent();
 }
 
 function drawMonths() {
@@ -401,7 +555,15 @@ function drawTable() {
     const tr = document.createElement('tr');
     const td = (txt, cls) => { const c = document.createElement('td'); if (cls) c.className = cls; c.textContent = txt; tr.append(c); return c; };
     td(d3.utcFormat('%-d %b')(new Date(r.date)), 'muted');
-    const mc = td(r.merchant); if (r.note) { const n = document.createElement('div'); n.className = 'muted'; n.textContent = r.note; mc.append(n); }
+    const mc = td(r.merchant);
+    if (r.source === 'manual') {
+      const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = 'added by you'; mc.append(tag);
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
+      del.setAttribute('aria-label', 'Remove ' + r.merchant);
+      del.addEventListener('click', () => { if (confirm('Remove "' + r.merchant + '" (' + rm(r.amount) + ')?')) removeManual(r.id, r.merchant); });
+      mc.append(del);
+    }
+    if (r.note) { const n = document.createElement('div'); n.className = 'muted'; n.textContent = r.note; mc.append(n); }
     const cc = td('', 'hide-sm'), chip = document.createElement('span'), i = document.createElement('i'); chip.className = 'chip'; i.className = 'sw'; i.style.background = color(r.type); chip.append(i, r.category); cc.append(chip);
     td(r.paid_with, 'hide-sm muted'); td(fmt(r.amount), 'num');
     return tr;
